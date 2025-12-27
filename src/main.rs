@@ -24,11 +24,17 @@ fn main() -> color_eyre::Result<()> {
         Commands::Status => cli::status::display_status(),
         Commands::Init => cli::init::run_init(),
         Commands::Profile(profile_cmd) => match profile_cmd {
-            ProfileCommands::List => cli::profile::list_profiles(),
-            ProfileCommands::Show { name } => cli::profile::show_profile(&name),
-            ProfileCommands::Apply { name } => cli::profile::apply_profile(&name),
-            ProfileCommands::Add { name } => cli::profile::add_profile(&name),
-            ProfileCommands::Remove { name } => cli::profile::remove_profile(&name),
+            ProfileCommands::List { harness } => cli::profile::list_profiles(&harness),
+            ProfileCommands::Show { harness, name } => cli::profile::show_profile(&harness, &name),
+            ProfileCommands::Create { harness, name } => {
+                cli::profile::create_profile(&harness, &name)
+            }
+            ProfileCommands::Delete { harness, name } => {
+                cli::profile::delete_profile(&harness, &name)
+            }
+            ProfileCommands::Switch { harness, name } => {
+                cli::profile::switch_profile(&harness, &name)
+            }
         },
         Commands::Tui => cli::tui::run_tui(),
     }

@@ -20,30 +20,41 @@ pub enum Commands {
 
 #[derive(Subcommand, Debug)]
 pub enum ProfileCommands {
-    /// List available profiles.
-    List,
+    /// List profiles for a harness.
+    List {
+        /// Harness name (claude-code, opencode, goose).
+        harness: String,
+    },
 
     /// Show details of a specific profile.
     Show {
-        /// Profile name to show.
+        /// Harness name.
+        harness: String,
+        /// Profile name.
         name: String,
     },
 
-    /// Apply a profile (activate its configuration).
-    Apply {
-        /// Profile name to apply.
+    /// Create a new profile.
+    Create {
+        /// Harness name.
+        harness: String,
+        /// Profile name.
         name: String,
     },
 
-    /// Add a new profile.
-    Add {
-        /// Profile name to create.
+    /// Delete a profile.
+    Delete {
+        /// Harness name.
+        harness: String,
+        /// Profile name.
         name: String,
     },
 
-    /// Remove a profile.
-    Remove {
-        /// Profile name to remove.
+    /// Switch to a profile (set as active).
+    Switch {
+        /// Harness name.
+        harness: String,
+        /// Profile name.
         name: String,
     },
 }

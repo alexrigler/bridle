@@ -16,7 +16,9 @@ pub fn display_status() {
         };
         println!("  {} - {}", kind, status);
 
-        if harness.is_installed() && let Ok(config) = harness.config(&Scope::Global) {
+        if harness.is_installed()
+            && let Ok(config) = harness.config(&Scope::Global)
+        {
             println!("    Config: {}", config.display());
         }
     }
