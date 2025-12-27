@@ -1,0 +1,1 @@
+{"id":"bridle-zo9","title":"Phase 1: Global Profile Management","description":"Implement global profile management for Claude Code and OpenCode harnesses. Covers CLI foundation, profile CRUD, switching, edit/diff, and TUI.","status":"open","priority":1,"issue_type":"epic","created_at":"2025-12-27T18:07:43.692162Z","updated_at":"2025-12-27T18:07:43.692162Z"}
