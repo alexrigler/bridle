@@ -30,6 +30,6 @@ impl BridleConfig {
     pub fn config_path() -> crate::error::Result<PathBuf> {
         dirs::config_dir()
             .map(|d| d.join("bridle").join("config.toml"))
-            .ok_or_else(|| crate::error::Error::ConfigNotFound("config directory".into()))
+            .ok_or_else(|| crate::error::Error::NoConfigFound("config directory".into()))
     }
 }

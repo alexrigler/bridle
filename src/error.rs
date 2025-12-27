@@ -10,13 +10,33 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Errors that can occur in bridle.
 #[derive(Error, Debug)]
 pub enum Error {
-    /// Configuration file not found.
-    #[error("config not found: {0}")]
-    ConfigNotFound(String),
+    /// No configuration file found at expected location.
+    #[error("no config found: {0}")]
+    NoConfigFound(String),
 
     /// Failed to read or write configuration.
     #[error("config error: {0}")]
     Config(String),
+
+    /// Harness executable not installed or not in PATH.
+    #[error("harness not installed")]
+    HarnessNotInstalled,
+
+    /// Profile with given name does not exist.
+    #[error("profile not found: {0}")]
+    ProfileNotFound(String),
+
+    /// Profile with given name already exists.
+    #[error("profile already exists: {0}")]
+    ProfileExists(String),
+
+    /// No profile is currently active.
+    #[error("no active profile")]
+    NoActiveProfile,
+
+    /// Profile name contains invalid characters.
+    #[error("invalid profile name: {0}")]
+    InvalidProfileName(String),
 
     /// IO error.
     #[error(transparent)]
