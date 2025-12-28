@@ -13,7 +13,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
@@ -43,6 +43,7 @@ struct App {
     harness_state: ListState,
     profiles: Vec<ProfileInfo>,
     profile_state: ListState,
+    expanded_profile: Option<usize>,
     status_message: Option<String>,
     bridle_config: BridleConfig,
     manager: ProfileManager,
@@ -72,6 +73,7 @@ impl App {
             harness_state,
             profiles: Vec::new(),
             profile_state: ListState::default(),
+            expanded_profile: None,
             status_message: Some("Press ? for help".to_string()),
             bridle_config,
             manager,
@@ -122,6 +124,7 @@ impl App {
     fn refresh_profiles(&mut self) {
         self.profiles.clear();
         self.profile_state.select(None);
+        self.expanded_profile = None;
 
         if let Some(kind) = self.selected_harness() {
             let harness = Harness::new(kind);
@@ -252,6 +255,23 @@ impl App {
         }
     }
 
+    fn toggle_expansion(&mut self) {
+        let Some(idx) = self.profile_state.selected() else {
+            return;
+        };
+        if self.expanded_profile == Some(idx) {
+            self.expanded_profile = None;
+        } else {
+            self.expanded_profile = Some(idx);
+        }
+    }
+
+    fn is_selected_expanded(&self) -> bool {
+        self.profile_state
+            .selected()
+            .is_some_and(|idx| self.expanded_profile == Some(idx))
+    }
+
     fn switch_to_selected(&mut self) {
         let Some(kind) = self.selected_harness() else {
             return;
@@ -326,7 +346,16 @@ impl App {
             },
             KeyCode::Enter => {
                 if self.active_pane == Pane::Profiles {
-                    self.switch_to_selected();
+                    if self.is_selected_expanded() {
+                        self.switch_to_selected();
+                    } else {
+                        self.toggle_expansion();
+                    }
+                }
+            }
+            KeyCode::Char(' ') => {
+                if self.active_pane == Pane::Profiles {
+                    self.toggle_expansion();
                 }
             }
             KeyCode::Char('r') => {
@@ -497,6 +526,119 @@ fn render_harness_pane(frame: &mut Frame, app: &mut App, area: Rect) {
     frame.render_stateful_widget(list, area, &mut app.harness_state);
 }
 
+fn render_profile_compact(profile: &ProfileInfo) -> Line<'static> {
+    let active_marker = if profile.is_active { "● " } else { "  " };
+    let mcp_count = profile.mcp_servers.len();
+    let mcp_info = if mcp_count > 0 {
+        format!(" ({} MCP)", mcp_count)
+    } else {
+        String::new()
+    };
+    let style = if profile.is_active {
+        Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
+    Line::styled(
+        format!("{}{}{}", active_marker, profile.name, mcp_info),
+        style,
+    )
+}
+
+fn render_profile_expanded(profile: &ProfileInfo) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+
+    let active_marker = if profile.is_active { "● " } else { "  " };
+    lines.push(Line::from(vec![
+        Span::styled(
+            format!("{}{}", active_marker, profile.name),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " ─────────────────────────",
+            Style::default().fg(Color::DarkGray),
+        ),
+    ]));
+
+    let mut theme_model = Vec::new();
+    if let Some(ref theme) = profile.theme {
+        theme_model.push(format!("Theme: {}", theme));
+    }
+    if let Some(ref model) = profile.model {
+        theme_model.push(format!("Model: {}", model));
+    }
+    if !theme_model.is_empty() {
+        lines.push(Line::styled(
+            format!("  │ {}", theme_model.join("  ")),
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
+
+    if !profile.mcp_servers.is_empty() {
+        let mut spans: Vec<Span> = vec![Span::styled(
+            "  │ MCP: ",
+            Style::default().fg(Color::DarkGray),
+        )];
+        for (i, server) in profile.mcp_servers.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::raw(" "));
+            }
+            let (marker, color) = if server.enabled {
+                ("✓", Color::Green)
+            } else {
+                ("✗", Color::Red)
+            };
+            spans.push(Span::styled(
+                format!("{}{}", marker, server.name),
+                Style::default().fg(color),
+            ));
+        }
+        lines.push(Line::from(spans));
+    }
+
+    let mut counts = vec![
+        format!("Skills: {}", profile.skills.items.len()),
+        format!("Commands: {}", profile.commands.items.len()),
+    ];
+    if let Some(ref plugins) = profile.plugins {
+        counts.push(format!("Plugins: {}", plugins.items.len()));
+    }
+    if let Some(ref agents) = profile.agents {
+        counts.push(format!("Agents: {}", agents.items.len()));
+    }
+    lines.push(Line::styled(
+        format!("  │ {}", counts.join("  ")),
+        Style::default().fg(Color::DarkGray),
+    ));
+
+    if let Some(ref rules) = profile.rules_file
+        && let Some(filename) = rules.file_name()
+    {
+        lines.push(Line::styled(
+            format!("  │ Rules: {}", filename.to_string_lossy()),
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
+
+    for error in &profile.extraction_errors {
+        lines.push(Line::styled(
+            format!("  │ ⚠ {}", error),
+            Style::default().fg(Color::Yellow),
+        ));
+    }
+
+    lines.push(Line::styled(
+        "  └─────────────────────────────",
+        Style::default().fg(Color::DarkGray),
+    ));
+
+    lines
+}
+
 fn render_profile_pane(frame: &mut Frame, app: &mut App, area: Rect) {
     let is_active = app.active_pane == Pane::Profiles;
     let border_style = if is_active {
@@ -537,24 +679,14 @@ fn render_profile_pane(frame: &mut Frame, app: &mut App, area: Rect) {
     let items: Vec<ListItem> = app
         .profiles
         .iter()
-        .map(|profile| {
-            let active_marker = if profile.is_active { "● " } else { "  " };
-            let mcp_count = profile.mcp_servers.len();
-            let mcp_info = if mcp_count > 0 {
-                format!(" [{} MCPs]", mcp_count)
+        .enumerate()
+        .map(|(idx, profile)| {
+            let is_expanded = app.expanded_profile == Some(idx);
+            if is_expanded {
+                ListItem::new(Text::from(render_profile_expanded(profile)))
             } else {
-                String::new()
-            };
-
-            let style = if profile.is_active {
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-
-            ListItem::new(format!("{}{}{}", active_marker, profile.name, mcp_info)).style(style)
+                ListItem::new(render_profile_compact(profile))
+            }
         })
         .collect();
 
