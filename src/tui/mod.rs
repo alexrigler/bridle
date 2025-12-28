@@ -9,10 +9,10 @@ use get_harness::{Harness, HarnessKind};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
 use crate::config::{BridleConfig, ProfileInfo, ProfileManager, ProfileName};
@@ -37,6 +37,7 @@ struct App {
     status_message: Option<String>,
     bridle_config: BridleConfig,
     manager: ProfileManager,
+    show_help: bool,
 }
 
 impl App {
@@ -63,6 +64,7 @@ impl App {
             status_message: Some("Press ? for help".to_string()),
             bridle_config,
             manager,
+            show_help: false,
         };
 
         app.refresh_profiles();
@@ -248,8 +250,19 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyCode) {
+        if self.show_help {
+            match key {
+                KeyCode::Char('?') | KeyCode::Esc | KeyCode::Char('q') => {
+                    self.show_help = false;
+                }
+                _ => {}
+            }
+            return;
+        }
+
         match key {
             KeyCode::Char('q') | KeyCode::Esc => self.running = false,
+            KeyCode::Char('?') => self.show_help = true,
             KeyCode::Tab => {
                 self.active_pane = match self.active_pane {
                     Pane::Harnesses => Pane::Profiles,
@@ -330,6 +343,10 @@ fn ui(frame: &mut Frame, app: &mut App) {
     render_harness_pane(frame, app, main_chunks[0]);
     render_profile_pane(frame, app, main_chunks[1]);
     render_status_bar(frame, app, chunks[1]);
+
+    if app.show_help {
+        render_help_modal(frame, frame.area());
+    }
 }
 
 fn render_harness_pane(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -425,6 +442,53 @@ fn render_profile_pane(frame: &mut Frame, app: &mut App, area: Rect) {
         .highlight_symbol("> ");
 
     frame.render_stateful_widget(list, area, &mut app.profile_state);
+}
+
+fn render_help_modal(frame: &mut Frame, area: Rect) {
+    let help_text = vec![
+        Line::from(vec![Span::styled(
+            "Navigation",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]),
+        Line::from("  j / ↓     Move down"),
+        Line::from("  k / ↑     Move up"),
+        Line::from("  Tab       Switch pane"),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Actions",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]),
+        Line::from("  Enter     Switch to profile"),
+        Line::from("  n         New profile"),
+        Line::from("  d         Delete profile"),
+        Line::from("  e         Edit profile"),
+        Line::from("  r         Refresh"),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "General",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]),
+        Line::from("  ?         Toggle help"),
+        Line::from("  q / Esc   Quit"),
+    ];
+
+    let width = 40;
+    let height = help_text.len() as u16 + 4;
+    let x = area.width.saturating_sub(width) / 2;
+    let y = area.height.saturating_sub(height) / 2;
+    let modal_area = Rect::new(x, y, width.min(area.width), height.min(area.height));
+
+    frame.render_widget(Clear, modal_area);
+
+    let help_block = Block::default()
+        .title(" Help ")
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Black));
+
+    let help_paragraph = Paragraph::new(help_text).block(help_block);
+    frame.render_widget(help_paragraph, modal_area);
 }
 
 fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
