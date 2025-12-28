@@ -141,6 +141,70 @@ impl App {
         self.profile_state.select(Some(i));
     }
 
+    fn delete_selected(&mut self) {
+        let Some(kind) = self.selected_harness() else {
+            return;
+        };
+        let Some(idx) = self.profile_state.selected() else {
+            self.status_message = Some("No profile selected".to_string());
+            return;
+        };
+        let profile = &self.profiles[idx];
+        let harness = Harness::new(kind);
+        let Ok(profile_name) = ProfileName::new(&profile.name) else {
+            self.status_message = Some("Invalid profile name".to_string());
+            return;
+        };
+
+        match self.manager.delete_profile(&harness, &profile_name) {
+            Ok(()) => {
+                self.status_message = Some(format!("Deleted '{}'", profile.name));
+                self.refresh_profiles();
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Delete failed: {}", e));
+            }
+        }
+    }
+
+    fn edit_selected(&mut self) {
+        let Some(kind) = self.selected_harness() else {
+            return;
+        };
+        let Some(idx) = self.profile_state.selected() else {
+            self.status_message = Some("No profile selected".to_string());
+            return;
+        };
+        let profile = &self.profiles[idx];
+        let harness = Harness::new(kind);
+        let Ok(profile_name) = ProfileName::new(&profile.name) else {
+            self.status_message = Some("Invalid profile name".to_string());
+            return;
+        };
+
+        let profile_path = self.manager.profile_path(&harness, &profile_name);
+        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+
+        let _ = restore_terminal_for_editor();
+        let status = std::process::Command::new(&editor)
+            .arg(&profile_path)
+            .status();
+        let _ = reinit_terminal_after_editor();
+
+        match status {
+            Ok(s) if s.success() => {
+                self.status_message = Some(format!("Edited '{}'", profile.name));
+                self.refresh_profiles();
+            }
+            Ok(s) => self.status_message = Some(format!("Editor exited: {}", s)),
+            Err(e) => self.status_message = Some(format!("Editor failed: {}", e)),
+        }
+    }
+
+    fn create_new_profile(&mut self) {
+        self.status_message = Some("Use CLI: bridle profile create <harness> <name>".to_string());
+    }
+
     fn switch_to_selected(&mut self) {
         let Some(kind) = self.selected_harness() else {
             return;
@@ -204,6 +268,17 @@ impl App {
                 self.refresh_profiles();
                 self.status_message = Some("Refreshed".to_string());
             }
+            KeyCode::Char('n') => self.create_new_profile(),
+            KeyCode::Char('d') => {
+                if self.active_pane == Pane::Profiles {
+                    self.delete_selected();
+                }
+            }
+            KeyCode::Char('e') => {
+                if self.active_pane == Pane::Profiles {
+                    self.edit_selected();
+                }
+            }
             _ => {}
         }
     }
@@ -221,6 +296,18 @@ fn restore_terminal(terminal: &mut Tui) -> io::Result<()> {
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
+    Ok(())
+}
+
+fn restore_terminal_for_editor() -> io::Result<()> {
+    disable_raw_mode()?;
+    execute!(io::stdout(), LeaveAlternateScreen)?;
+    Ok(())
+}
+
+fn reinit_terminal_after_editor() -> io::Result<()> {
+    enable_raw_mode()?;
+    execute!(io::stdout(), EnterAlternateScreen)?;
     Ok(())
 }
 
@@ -336,7 +423,7 @@ fn render_profile_pane(frame: &mut Frame, app: &mut App, area: Rect) {
 }
 
 fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
-    let help = "q:quit  Tab:switch pane  j/k:navigate  Enter:switch profile  r:refresh";
+    let help = "q:quit  Tab:pane  j/k:nav  Enter:switch  n:new  d:del  e:edit  r:refresh";
     let msg = app.status_message.as_deref().unwrap_or("");
 
     let spans = vec![
