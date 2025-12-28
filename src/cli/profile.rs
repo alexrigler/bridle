@@ -72,6 +72,17 @@ pub fn show_profile(harness_name: &str, profile_name: &str) {
                 if info.is_active { "Active" } else { "Inactive" }
             );
             println!("Path: {}", info.path.display());
+
+            if info.is_active {
+                let marker_exists = harness
+                    .config_dir()
+                    .ok()
+                    .map(|dir| dir.join(format!("BRIDLE_PROFILE_{}", info.name)).exists())
+                    .unwrap_or(false);
+                if marker_exists {
+                    println!("Marker: BRIDLE_PROFILE_{}", info.name);
+                }
+            }
             println!();
 
             // Theme (OpenCode only)
@@ -257,7 +268,8 @@ pub fn edit_profile(harness_name: &str, profile_name: &str) {
         return;
     }
 
-    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+    let config = crate::config::BridleConfig::load().unwrap_or_default();
+    let editor = config.editor();
     let status = std::process::Command::new(&editor)
         .arg(&profile_path)
         .status();

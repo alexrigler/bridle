@@ -16,6 +16,27 @@ pub enum Commands {
 
     /// Launch terminal UI.
     Tui,
+
+    /// Manage bridle settings.
+    #[command(subcommand)]
+    Config(ConfigCommands),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigCommands {
+    /// Set a configuration value.
+    Set {
+        /// Setting name (e.g., profile_marker).
+        key: String,
+        /// Value to set (true/false for booleans).
+        value: String,
+    },
+
+    /// Get a configuration value.
+    Get {
+        /// Setting name.
+        key: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]

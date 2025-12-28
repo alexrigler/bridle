@@ -1,3 +1,7 @@
+mod theme;
+mod views;
+mod widgets;
+
 use std::io::{self, Stdout};
 
 use crossterm::{
@@ -10,15 +14,17 @@ use harness_locate::{Harness, HarnessKind, InstallationStatus};
 use crate::harness::HarnessConfig;
 use ratatui::{
     Frame, Terminal,
-    backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
+    prelude::{Alignment, CrosstermBackend},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, TableState},
 };
 
 use crate::config::{BridleConfig, ProfileInfo, ProfileManager, ProfileName};
 use crate::error::Error;
+use views::ViewMode;
+use widgets::{DetailPane, HarnessTabs, ProfileTable};
 
 type Tui = Terminal<CrosstermBackend<Stdout>>;
 
@@ -33,16 +39,19 @@ enum InputMode {
     #[default]
     Normal,
     CreatingProfile,
+    ConfirmingDelete,
 }
 
 #[derive(Debug)]
 struct App {
     running: bool,
+    view_mode: ViewMode,
     active_pane: Pane,
     harnesses: Vec<HarnessKind>,
     harness_state: ListState,
     profiles: Vec<ProfileInfo>,
     profile_state: ListState,
+    profile_table_state: TableState,
     expanded_profile: Option<usize>,
     status_message: Option<String>,
     bridle_config: BridleConfig,
@@ -69,13 +78,15 @@ impl App {
 
         let mut app = Self {
             running: true,
+            view_mode: ViewMode::default(),
             active_pane: Pane::Harnesses,
             harnesses,
             harness_state,
             profiles: Vec::new(),
             profile_state: ListState::default(),
+            profile_table_state: TableState::default(),
             expanded_profile: None,
-            status_message: Some("Press ? for help".to_string()),
+            status_message: None,
             bridle_config,
             manager,
             show_help: false,
@@ -126,6 +137,7 @@ impl App {
     fn refresh_profiles(&mut self) {
         self.profiles.clear();
         self.profile_state.select(None);
+        self.profile_table_state.select(None);
         self.expanded_profile = None;
 
         if let Some(kind) = self.selected_harness() {
@@ -141,6 +153,7 @@ impl App {
 
             if !self.profiles.is_empty() {
                 self.profile_state.select(Some(0));
+                self.profile_table_state.select(Some(0));
             }
         }
     }
@@ -178,6 +191,7 @@ impl App {
             None => 0,
         };
         self.profile_state.select(Some(i));
+        self.profile_table_state.select(Some(i));
     }
 
     fn prev_profile(&mut self) {
@@ -195,6 +209,7 @@ impl App {
             None => 0,
         };
         self.profile_state.select(Some(i));
+        self.profile_table_state.select(Some(i));
     }
 
     fn delete_selected(&mut self) {
@@ -239,7 +254,7 @@ impl App {
         };
 
         let profile_path = self.manager.profile_path(&harness, &profile_name);
-        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+        let editor = self.bridle_config.editor();
 
         let _ = restore_terminal_for_editor();
         let status = std::process::Command::new(&editor)
@@ -306,7 +321,12 @@ impl App {
             Ok(_) => {
                 self.bridle_config = BridleConfig::load().unwrap_or_default();
                 self.status_message = Some(format!("Switched to '{}'", profile.name));
+                let selected_idx = self.profile_state.selected();
                 self.refresh_profiles();
+                if let Some(idx) = selected_idx {
+                    self.profile_state.select(Some(idx));
+                    self.profile_table_state.select(Some(idx));
+                }
             }
             Err(e) => {
                 self.status_message = Some(format!("Switch failed: {}", e));
@@ -328,6 +348,7 @@ impl App {
         match self.input_mode {
             InputMode::Normal => self.handle_normal_key(key),
             InputMode::CreatingProfile => self.handle_input_key(key),
+            InputMode::ConfirmingDelete => self.handle_confirm_delete_key(key),
         }
     }
 
@@ -335,29 +356,54 @@ impl App {
         match key {
             KeyCode::Char('q') | KeyCode::Esc => self.running = false,
             KeyCode::Char('?') => self.show_help = true,
+            KeyCode::F(2) => {
+                self.view_mode.toggle();
+                self.status_message = Some(format!("View: {}", self.view_mode.name()));
+            }
             KeyCode::Tab => {
                 self.active_pane = match self.active_pane {
                     Pane::Harnesses => Pane::Profiles,
                     Pane::Profiles => Pane::Harnesses,
                 };
             }
-            KeyCode::Up | KeyCode::Char('k') => match self.active_pane {
-                Pane::Harnesses => self.prev_harness(),
-                Pane::Profiles => self.prev_profile(),
+            KeyCode::Up | KeyCode::Char('k') => match self.view_mode {
+                ViewMode::Dashboard => self.prev_profile(),
+                ViewMode::Legacy => match self.active_pane {
+                    Pane::Harnesses => self.prev_harness(),
+                    Pane::Profiles => self.prev_profile(),
+                },
             },
-            KeyCode::Down | KeyCode::Char('j') => match self.active_pane {
-                Pane::Harnesses => self.next_harness(),
-                Pane::Profiles => self.next_profile(),
+            KeyCode::Down | KeyCode::Char('j') => match self.view_mode {
+                ViewMode::Dashboard => self.next_profile(),
+                ViewMode::Legacy => match self.active_pane {
+                    Pane::Harnesses => self.next_harness(),
+                    Pane::Profiles => self.next_profile(),
+                },
             },
-            KeyCode::Enter => {
-                if self.active_pane == Pane::Profiles {
-                    if self.is_selected_expanded() {
-                        self.switch_to_selected();
-                    } else {
-                        self.toggle_expansion();
-                    }
+            KeyCode::Left | KeyCode::Char('h') => {
+                if self.view_mode == ViewMode::Dashboard {
+                    self.prev_harness();
                 }
             }
+            KeyCode::Right | KeyCode::Char('l') => {
+                if self.view_mode == ViewMode::Dashboard {
+                    self.next_harness();
+                }
+            }
+            KeyCode::Enter => match self.view_mode {
+                ViewMode::Dashboard => {
+                    self.switch_to_selected();
+                }
+                ViewMode::Legacy => {
+                    if self.active_pane == Pane::Profiles {
+                        if self.is_selected_expanded() {
+                            self.switch_to_selected();
+                        } else {
+                            self.toggle_expansion();
+                        }
+                    }
+                }
+            },
             KeyCode::Char(' ') => {
                 if self.active_pane == Pane::Profiles {
                     self.toggle_expansion();
@@ -373,12 +419,19 @@ impl App {
                 self.status_message = Some("Enter profile name (Esc to cancel)".to_string());
             }
             KeyCode::Char('d') => {
-                if self.active_pane == Pane::Profiles {
-                    self.delete_selected();
+                if (matches!(self.view_mode, ViewMode::Dashboard)
+                    || self.active_pane == Pane::Profiles)
+                    && let Some(idx) = self.profile_state.selected()
+                    && let Some(profile) = self.profiles.get(idx)
+                {
+                    self.input_buffer = profile.name.clone();
+                    self.input_mode = InputMode::ConfirmingDelete;
                 }
             }
             KeyCode::Char('e') => {
-                if self.active_pane == Pane::Profiles {
+                if matches!(self.view_mode, ViewMode::Dashboard)
+                    || self.active_pane == Pane::Profiles
+                {
                     self.edit_selected();
                 }
             }
@@ -399,6 +452,22 @@ impl App {
             }
             KeyCode::Char(c) => {
                 self.input_buffer.push(c);
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_confirm_delete_key(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                self.delete_selected();
+                self.input_mode = InputMode::Normal;
+                self.input_buffer.clear();
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+                self.input_buffer.clear();
+                self.status_message = Some("Delete cancelled".to_string());
             }
             _ => {}
         }
@@ -470,6 +539,17 @@ fn reinit_terminal_after_editor() -> io::Result<()> {
 }
 
 fn ui(frame: &mut Frame, app: &mut App) {
+    match app.view_mode {
+        ViewMode::Legacy => render_legacy_view(frame, app),
+        ViewMode::Dashboard => render_dashboard_view(frame, app),
+    }
+
+    if app.show_help {
+        render_help_modal(frame, frame.area());
+    }
+}
+
+fn render_legacy_view(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(1)])
@@ -483,10 +563,113 @@ fn ui(frame: &mut Frame, app: &mut App) {
     render_harness_pane(frame, app, main_chunks[0]);
     render_profile_pane(frame, app, main_chunks[1]);
     render_status_bar(frame, app, chunks[1]);
+}
 
-    if app.show_help {
-        render_help_modal(frame, frame.area());
+fn render_dashboard_view(frame: &mut Frame, app: &mut App) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .split(frame.area());
+
+    render_harness_tabs(frame, app, chunks[0]);
+
+    let content_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .split(chunks[1]);
+
+    render_profile_table(frame, app, content_chunks[0]);
+    render_detail_pane(frame, app, content_chunks[1]);
+
+    render_status_bar(frame, app, chunks[2]);
+
+    if app.input_mode == InputMode::CreatingProfile {
+        render_input_popup(frame, app);
     }
+    if app.input_mode == InputMode::ConfirmingDelete {
+        render_confirm_delete_popup(frame, app);
+    }
+}
+
+fn render_confirm_delete_popup(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+    let popup_width = 50.min(area.width.saturating_sub(4));
+    let popup_height = 3;
+    let popup_x = (area.width.saturating_sub(popup_width)) / 2;
+    let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+
+    let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+
+    frame.render_widget(Clear, popup_area);
+
+    let confirm_text = format!("Delete '{}'? (y/n)", app.input_buffer);
+    let confirm = Paragraph::new(confirm_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Red))
+                .title(" Confirm Delete "),
+        )
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(confirm, popup_area);
+}
+
+fn render_input_popup(frame: &mut Frame, app: &App) {
+    let area = frame.area();
+    let popup_width = 50.min(area.width.saturating_sub(4));
+    let popup_height = 3;
+    let popup_x = (area.width.saturating_sub(popup_width)) / 2;
+    let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+
+    let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+
+    frame.render_widget(Clear, popup_area);
+
+    let input_text = format!("{}█", app.input_buffer);
+    let input = Paragraph::new(input_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow))
+                .title(" New Profile Name (Enter to create, Esc to cancel) "),
+        )
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(input, popup_area);
+}
+
+fn render_profile_table(frame: &mut Frame, app: &mut App, area: Rect) {
+    let table = ProfileTable::new(&app.profiles);
+    frame.render_stateful_widget(table, area, &mut app.profile_table_state);
+}
+
+fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect) {
+    let selected_profile = app
+        .profile_table_state
+        .selected()
+        .and_then(|i| app.profiles.get(i));
+
+    let detail = DetailPane::new(selected_profile);
+    frame.render_widget(detail, area);
+}
+
+fn render_harness_tabs(frame: &mut Frame, app: &App, area: Rect) {
+    let mut tabs = HarnessTabs::new(&app.harnesses, app.harness_state.selected().unwrap_or(0));
+
+    for kind in &app.harnesses {
+        let harness = Harness::new(*kind);
+        let has_active = app.bridle_config.active_profile_for(harness.id()).is_some();
+        if has_active {
+            tabs = tabs.with_active_indicator(harness.id(), true);
+        }
+    }
+
+    frame.render_widget(tabs, area);
 }
 
 fn render_harness_pane(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -860,11 +1043,31 @@ fn render_help_modal(frame: &mut Frame, area: Rect) {
 }
 
 fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
-    let help = "q:quit  Tab:pane  j/k:nav  Enter:switch  n:new  d:del  e:edit  r:refresh";
+    let help = match app.view_mode {
+        ViewMode::Dashboard => {
+            "q:quit  h/l:harness  j/k:profile  Enter:switch  n:new  d:del  e:edit  r:refresh  ?:help"
+        }
+        ViewMode::Legacy => {
+            "q:quit  Tab:pane  j/k:nav  Enter:switch  n:new  d:del  e:edit  r:refresh  ?:help"
+        }
+    };
+
+    let mode_indicator = match app.view_mode {
+        ViewMode::Dashboard => "[Dashboard]",
+        ViewMode::Legacy => "[Legacy]",
+    };
+
     let msg = app.status_message.as_deref().unwrap_or("");
 
     let spans = vec![
-        Span::styled(help, Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            mode_indicator,
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" "),
+        Span::styled(help, Style::default().add_modifier(Modifier::DIM)),
         Span::raw("  "),
         Span::styled(msg, Style::default().fg(Color::Yellow)),
     ];

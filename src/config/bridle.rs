@@ -11,9 +11,28 @@ pub struct BridleConfig {
     #[serde(default)]
     pub active: HashMap<String, String>,
 
+    /// Whether to create BRIDLE_PROFILE_<name> marker files in harness config directories.
+    /// Disabled by default (opt-in).
+    #[serde(default)]
+    pub profile_marker: bool,
+
     /// Legacy field for migration (ignored on save).
     #[serde(skip_serializing, default)]
     active_profile: Option<String>,
+
+    /// Preferred editor for editing profiles.
+    /// Falls back to $EDITOR env var, then "vi".
+    #[serde(default)]
+    pub editor: Option<String>,
+}
+
+impl BridleConfig {
+    pub fn editor(&self) -> String {
+        self.editor
+            .clone()
+            .or_else(|| std::env::var("EDITOR").ok())
+            .unwrap_or_else(|| "vi".to_string())
+    }
 }
 
 impl BridleConfig {
@@ -71,5 +90,13 @@ impl BridleConfig {
     /// Clear the active profile for a harness.
     pub fn clear_active_profile(&mut self, harness_id: &str) {
         self.active.remove(harness_id);
+    }
+
+    pub fn profile_marker_enabled(&self) -> bool {
+        self.profile_marker
+    }
+
+    pub fn set_profile_marker(&mut self, enabled: bool) {
+        self.profile_marker = enabled;
     }
 }

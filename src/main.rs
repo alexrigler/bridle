@@ -5,7 +5,7 @@ mod harness;
 mod tui;
 
 use clap::Parser;
-use cli::{Commands, ProfileCommands};
+use cli::{Commands, ConfigCommands, ProfileCommands};
 
 #[derive(Parser)]
 #[command(name = "bridle")]
@@ -51,6 +51,10 @@ fn main() -> color_eyre::Result<()> {
             } => cli::profile::diff_profiles(&harness, &name, other.as_deref()),
         },
         Commands::Tui => cli::tui::run_tui()?,
+        Commands::Config(config_cmd) => match config_cmd {
+            ConfigCommands::Set { key, value } => cli::config_cmd::set_config(&key, &value),
+            ConfigCommands::Get { key } => cli::config_cmd::get_config(&key),
+        },
     }
 
     Ok(())

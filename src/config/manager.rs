@@ -151,9 +151,34 @@ pub struct ProfileManager {
     profiles_dir: PathBuf,
 }
 
+const MARKER_PREFIX: &str = "BRIDLE_PROFILE_";
+
 impl ProfileManager {
     pub fn new(profiles_dir: PathBuf) -> Self {
         Self { profiles_dir }
+    }
+
+    fn delete_marker_files(dir: &std::path::Path) -> Result<()> {
+        if !dir.exists() {
+            return Ok(());
+        }
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let dominated_name = entry.file_name();
+            let Some(name) = dominated_name.to_str() else {
+                continue;
+            };
+            if name.starts_with(MARKER_PREFIX) && entry.file_type()?.is_file() {
+                std::fs::remove_file(entry.path())?;
+            }
+        }
+        Ok(())
+    }
+
+    fn create_marker_file(dir: &std::path::Path, profile_name: &str) -> Result<()> {
+        let marker_path = dir.join(format!("{}{}", MARKER_PREFIX, profile_name));
+        std::fs::File::create(marker_path)?;
+        Ok(())
     }
 
     pub fn profiles_dir(&self) -> &PathBuf {
@@ -896,7 +921,25 @@ impl ProfileManager {
         config.set_active_profile(harness.id(), name.as_str());
         config.save()?;
 
+        Self::delete_marker_files(&target_dir)?;
+        if config.profile_marker_enabled() {
+            Self::create_marker_file(&target_dir, name.as_str())?;
+        }
+
         Ok(target_dir)
+    }
+
+    pub fn update_marker_file(
+        harness: &dyn HarnessConfig,
+        profile_name: Option<&str>,
+        enabled: bool,
+    ) -> Result<()> {
+        let config_dir = harness.config_dir()?;
+        Self::delete_marker_files(&config_dir)?;
+        if let (true, Some(name)) = (enabled, profile_name) {
+            Self::create_marker_file(&config_dir, name)?;
+        }
+        Ok(())
     }
 }
 
