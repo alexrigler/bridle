@@ -546,7 +546,15 @@ impl ProfileManager {
                     .and_then(|v| v.as_str())
                     .map(String::from)
             }
-            "amp-code" => None,
+            "amp-code" => {
+                let config_path = profile_path.join("settings.json");
+                let content = std::fs::read_to_string(&config_path).ok()?;
+                let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
+                parsed
+                    .get("amp.theme")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            }
             _ => None,
         }
     }
@@ -610,25 +618,21 @@ impl ProfileManager {
         let content = std::fs::read_to_string(&config_path).ok()?;
         let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
 
-        let amp = parsed.get("amp")?;
-
-        if let Some(model) = amp.get("model").and_then(|m| m.as_str()) {
-            return Some(model.to_string());
-        }
-
-        if let Some(model_obj) = amp.get("model").and_then(|m| m.as_object()) {
-            for model in ["opus", "sonnet", "haiku"] {
-                if model_obj
-                    .get(model)
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false)
-                {
-                    return Some(format!("claude-{}", model));
-                }
+        // Try flat dotted keys first (actual AMP format)
+        if let Some(default_tier) = parsed.get("amp.model.default").and_then(|v| v.as_str()) {
+            let tier = default_tier.trim();
+            let model_key = format!("amp.model.{}", tier);
+            if let Some(model) = parsed.get(model_key.as_str()).and_then(|v| v.as_str()) {
+                return Some(model.to_string());
             }
         }
 
-        None
+        // Fallback: nested structure (backward compat)
+        parsed
+            .get("amp")
+            .and_then(|amp| amp.get("model"))
+            .and_then(|m| m.as_str())
+            .map(String::from)
     }
 
     fn extract_skills(
