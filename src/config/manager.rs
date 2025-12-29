@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use chrono::Local;
 use harness_locate::{DirectoryStructure, Harness, InstallationStatus, Scope};
 
+use serde::Serialize;
+
 use super::BridleConfig;
 use super::profile_name::ProfileName;
 use crate::error::{Error, Result};
@@ -142,7 +144,7 @@ fn extract_mcp_from_opencode_config(profile_path: &std::path::Path) -> Result<Ve
 }
 
 /// MCP server info with enabled status and connection details.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct McpServerInfo {
     pub name: String,
     pub enabled: bool,
@@ -153,7 +155,7 @@ pub struct McpServerInfo {
 }
 
 /// Summary of directory-based resources (skills, commands, etc.).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct ResourceSummary {
     /// List of resource names/items.
     pub items: Vec<String>,
@@ -162,7 +164,7 @@ pub struct ResourceSummary {
 }
 
 /// Information about a profile for display purposes.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct ProfileInfo {
     /// Profile name.
     pub name: String,
@@ -612,6 +614,15 @@ impl ProfileManager {
                 let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
                 parsed
                     .get("amp.theme")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            }
+            "claude-code" => {
+                let config_path = profile_path.join("settings.json");
+                let content = std::fs::read_to_string(&config_path).ok()?;
+                let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
+                parsed
+                    .get("theme")
                     .and_then(|v| v.as_str())
                     .map(String::from)
             }
@@ -1228,7 +1239,7 @@ mod tests {
         let live_config = temp.path().join("live_config");
         fs::create_dir_all(&live_config).unwrap();
 
-        let harness = MockHarness::new("test-harness", live_config.clone());
+        let harness = MockHarness::new("test-preserves-edits", live_config.clone());
         let manager = ProfileManager::new(profiles_dir);
 
         let profile_a = ProfileName::new("profile-a").unwrap();
@@ -1277,7 +1288,7 @@ mod tests {
         fs::write(live_config.join("config.txt"), "config content").unwrap();
         fs::write(&mcp_file, r#"{"servers": {}}"#).unwrap();
 
-        let harness = MockHarness::new("test-harness", live_config).with_mcp(mcp_file.clone());
+        let harness = MockHarness::new("test-copies-mcp", live_config).with_mcp(mcp_file.clone());
         let manager = ProfileManager::new(profiles_dir);
 
         let profile_name = ProfileName::new("test-profile").unwrap();
@@ -1305,7 +1316,7 @@ mod tests {
         fs::write(&mcp_file, r#"{"servers": {"a": true}}"#).unwrap();
 
         let harness =
-            MockHarness::new("test-harness", live_config.clone()).with_mcp(mcp_file.clone());
+            MockHarness::new("test-restores-mcp", live_config.clone()).with_mcp(mcp_file.clone());
         let manager = ProfileManager::new(profiles_dir);
 
         let profile_a = ProfileName::new("profile-a").unwrap();
