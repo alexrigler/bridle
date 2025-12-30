@@ -11,6 +11,7 @@ use crate::config::ProfileInfo;
 pub struct DetailPane<'a> {
     profile: Option<&'a ProfileInfo>,
     is_focused: bool,
+    scroll_offset: u16,
 }
 
 impl<'a> DetailPane<'a> {
@@ -18,12 +19,17 @@ impl<'a> DetailPane<'a> {
         Self {
             profile,
             is_focused: false,
+            scroll_offset: 0,
         }
     }
 
-    #[allow(dead_code)]
     pub fn focused(mut self, focused: bool) -> Self {
         self.is_focused = focused;
+        self
+    }
+
+    pub fn scroll(mut self, offset: u16) -> Self {
+        self.scroll_offset = offset;
         self
     }
 
@@ -54,6 +60,9 @@ impl Widget for DetailPane<'_> {
             )],
         };
 
-        Paragraph::new(content).block(block).render(area, buf);
+        Paragraph::new(content)
+            .block(block)
+            .scroll((self.scroll_offset, 0))
+            .render(area, buf);
     }
 }

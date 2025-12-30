@@ -29,11 +29,11 @@ fn main() -> color_eyre::Result<()> {
     match cli.command {
         None | Some(Commands::Tui) => cli::tui::run_tui()?,
         Some(Commands::Status) => cli::status::display_status(format),
-        Some(Commands::Init) => cli::init::run_init(),
+        Some(Commands::Init) => cli::init::run_init()?,
         Some(Commands::Profile(profile_cmd)) => match profile_cmd {
-            ProfileCommands::List { harness } => cli::profile::list_profiles(&harness, format),
+            ProfileCommands::List { harness } => cli::profile::list_profiles(&harness, format)?,
             ProfileCommands::Show { harness, name } => {
-                cli::profile::show_profile(&harness, &name, format)
+                cli::profile::show_profile(&harness, &name, format)?
             }
             ProfileCommands::Create {
                 harness,
@@ -41,27 +41,27 @@ fn main() -> color_eyre::Result<()> {
                 from_current,
             } => {
                 if from_current {
-                    cli::profile::create_profile_from_current(&harness, &name)
+                    cli::profile::create_profile_from_current(&harness, &name)?
                 } else {
-                    cli::profile::create_profile(&harness, &name)
+                    cli::profile::create_profile(&harness, &name)?
                 }
             }
             ProfileCommands::Delete { harness, name } => {
-                cli::profile::delete_profile(&harness, &name)
+                cli::profile::delete_profile(&harness, &name)?
             }
             ProfileCommands::Switch { harness, name } => {
-                cli::profile::switch_profile(&harness, &name)
+                cli::profile::switch_profile(&harness, &name)?
             }
-            ProfileCommands::Edit { harness, name } => cli::profile::edit_profile(&harness, &name),
+            ProfileCommands::Edit { harness, name } => cli::profile::edit_profile(&harness, &name)?,
             ProfileCommands::Diff {
                 harness,
                 name,
                 other,
-            } => cli::profile::diff_profiles(&harness, &name, other.as_deref()),
+            } => cli::profile::diff_profiles(&harness, &name, other.as_deref())?,
         },
         Some(Commands::Config(config_cmd)) => match config_cmd {
-            ConfigCommands::Set { key, value } => cli::config_cmd::set_config(&key, &value),
-            ConfigCommands::Get { key } => cli::config_cmd::get_config(&key),
+            ConfigCommands::Set { key, value } => cli::config_cmd::set_config(&key, &value)?,
+            ConfigCommands::Get { key } => cli::config_cmd::get_config(&key)?,
         },
     }
 

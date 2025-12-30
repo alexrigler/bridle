@@ -1,4 +1,7 @@
-//! Profile management.
+//! Profile management for harness configurations.
+//!
+//! This module provides [`ProfileManager`], the central coordinator for all profile
+//! operations including creation, deletion, switching, and configuration extraction.
 
 mod extraction;
 mod files;
@@ -14,6 +17,24 @@ use super::types::ProfileInfo;
 use crate::error::{Error, Result};
 use crate::harness::HarnessConfig;
 
+/// Manages harness configuration profiles.
+///
+/// `ProfileManager` handles the lifecycle of profiles stored under `~/.config/bridle/profiles/`.
+/// Each profile is a directory containing configuration files that can be switched into a
+/// harness's live configuration directory.
+///
+/// # Directory Structure
+///
+/// ```text
+/// ~/.config/bridle/profiles/
+/// ├── opencode/
+/// │   ├── default/
+/// │   └── work/
+/// ├── claude-code/
+/// │   └── default/
+/// └── goose/
+///     └── default/
+/// ```
 #[derive(Debug)]
 pub struct ProfileManager {
     profiles_dir: PathBuf,
@@ -22,6 +43,7 @@ pub struct ProfileManager {
 const MARKER_PREFIX: &str = "BRIDLE_PROFILE_";
 
 impl ProfileManager {
+    /// Creates a new profile manager with the given profiles directory.
     pub fn new(profiles_dir: PathBuf) -> Self {
         Self { profiles_dir }
     }
@@ -49,18 +71,25 @@ impl ProfileManager {
         Ok(())
     }
 
+    /// Returns the base directory where all profiles are stored.
     pub fn profiles_dir(&self) -> &PathBuf {
         &self.profiles_dir
     }
 
+    /// Returns the filesystem path for a specific profile.
     pub fn profile_path(&self, harness: &dyn HarnessConfig, name: &ProfileName) -> PathBuf {
         self.profiles_dir.join(harness.id()).join(name.as_str())
     }
 
+    /// Checks if a profile exists on disk.
     pub fn profile_exists(&self, harness: &dyn HarnessConfig, name: &ProfileName) -> bool {
         self.profile_path(harness, name).is_dir()
     }
 
+    /// Lists all profiles for a harness, sorted alphabetically.
+    ///
+    /// # Errors
+    /// Returns an error if the profiles directory cannot be read.
     pub fn list_profiles(&self, harness: &dyn HarnessConfig) -> Result<Vec<ProfileName>> {
         let harness_dir = self.profiles_dir.join(harness.id());
 
@@ -83,6 +112,10 @@ impl ProfileManager {
         Ok(profiles)
     }
 
+    /// Creates an empty profile directory.
+    ///
+    /// # Errors
+    /// Returns [`Error::ProfileExists`] if profile already exists, or IO error on failure.
     pub fn create_profile(
         &self,
         harness: &dyn HarnessConfig,
@@ -98,6 +131,10 @@ impl ProfileManager {
         Ok(path)
     }
 
+    /// Creates a profile by copying the harness's current configuration.
+    ///
+    /// # Errors
+    /// Returns [`Error::ProfileExists`] if profile exists, or IO error on copy failure.
     pub fn create_from_current(
         &self,
         harness: &dyn HarnessConfig,
@@ -106,6 +143,10 @@ impl ProfileManager {
         self.create_from_current_with_resources(harness, None, name)
     }
 
+    /// Creates a profile from current config, optionally including resource directories.
+    ///
+    /// # Errors
+    /// Returns error if profile exists or copy fails.
     pub fn create_from_current_with_resources(
         &self,
         harness: &dyn HarnessConfig,
@@ -141,6 +182,10 @@ impl ProfileManager {
         Ok(true)
     }
 
+    /// Deletes a profile and all its contents.
+    ///
+    /// # Errors
+    /// Returns [`Error::ProfileNotFound`] if profile doesn't exist.
     pub fn delete_profile(&self, harness: &dyn HarnessConfig, name: &ProfileName) -> Result<()> {
         let path = self.profile_path(harness, name);
 
@@ -152,6 +197,10 @@ impl ProfileManager {
         Ok(())
     }
 
+    /// Extracts and returns detailed information about a profile.
+    ///
+    /// # Errors
+    /// Returns [`Error::ProfileNotFound`] if profile doesn't exist.
     pub fn show_profile(&self, harness: &Harness, name: &ProfileName) -> Result<ProfileInfo> {
         let path = self.profile_path(harness, name);
 
