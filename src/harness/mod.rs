@@ -3,7 +3,6 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-mod adapter;
 mod display;
 
 use std::path::PathBuf;
@@ -12,7 +11,6 @@ use harness_locate::{InstallationStatus, McpServer, Scope};
 
 use crate::error::Result;
 
-pub use adapter::HarnessAdapter;
 pub use display::DisplayInfo;
 
 pub trait HarnessConfig {
