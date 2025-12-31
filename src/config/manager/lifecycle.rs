@@ -123,7 +123,9 @@ impl ProfileManager {
 
         for entry in std::fs::read_dir(&profile_path)? {
             let entry = entry?;
-            if entry.file_type()?.is_file() {
+            let file_type = entry.file_type()?;
+
+            if file_type.is_file() {
                 if let Some(ref mcp_name) = mcp_filename
                     && entry.file_name() == *mcp_name
                 {
@@ -131,6 +133,9 @@ impl ProfileManager {
                 }
                 let dest = temp_dir.join(entry.file_name());
                 std::fs::copy(entry.path(), dest)?;
+            } else if file_type.is_dir() {
+                let dest = temp_dir.join(entry.file_name());
+                files::copy_dir_filtered(&entry.path(), &dest)?;
             }
         }
 
