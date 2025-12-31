@@ -5,6 +5,12 @@ AGENTS.md
 HARNESS_SPEC.md
 outline.md
 
+# Internal development files
+harness-locate-bug-report.md
+harness-locate-bugs.md
+improvements.md
+TUI_TESTING.md
+
 # bv (beads viewer) local config and caches
 .bv/
 .beads/artifacts/

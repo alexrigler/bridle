@@ -38,7 +38,7 @@ fn profile_list_empty() {
     cmd.args(["profile", "list", "opencode"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("[]"));
+        .stdout(predicate::str::contains("No profiles found"));
 }
 
 #[test]
