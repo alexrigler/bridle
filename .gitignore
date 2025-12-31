@@ -8,3 +8,4 @@ outline.md
 # bv (beads viewer) local config and caches
 .bv/
 .beads/artifacts/
+.sisyphus

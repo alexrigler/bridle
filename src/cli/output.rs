@@ -18,21 +18,10 @@ pub enum ResolvedFormat {
 impl OutputFormat {
     pub fn resolve(self) -> ResolvedFormat {
         match self {
-            Self::Text => ResolvedFormat::Text,
+            Self::Text | Self::Auto => ResolvedFormat::Text,
             Self::Json => ResolvedFormat::Json,
-            Self::Auto => {
-                if is_nushell() {
-                    ResolvedFormat::Json
-                } else {
-                    ResolvedFormat::Text
-                }
-            }
         }
     }
-}
-
-fn is_nushell() -> bool {
-    std::env::var("NU_VERSION").is_ok()
 }
 
 pub fn output<T, F>(data: &T, format: ResolvedFormat, text_fn: F)
