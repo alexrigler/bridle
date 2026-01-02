@@ -429,17 +429,10 @@ pub fn extract_commands(
     }
 
     let dir_result = match harness.commands(&Scope::Global) {
-        Ok(Some(dir)) => {
-            let subdir = dir
-                .path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("commands");
-            (
-                extract_resource_summary(profile_path, subdir, &dir.structure),
-                None,
-            )
-        }
+        Ok(Some(dir)) => (
+            extract_resource_summary(profile_path, "commands", &dir.structure),
+            None,
+        ),
         Ok(None) => (ResourceSummary::default(), None),
         Err(e) => (ResourceSummary::default(), Some(format!("commands: {}", e))),
     };
@@ -597,21 +590,14 @@ pub fn extract_plugins(
     }
 
     match harness.plugins(&Scope::Global) {
-        Ok(Some(dir)) => {
-            let subdir = dir
-                .path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("plugins");
-            (
-                Some(extract_resource_summary(
-                    profile_path,
-                    subdir,
-                    &dir.structure,
-                )),
-                None,
-            )
-        }
+        Ok(Some(dir)) => (
+            Some(extract_resource_summary(
+                profile_path,
+                "plugins",
+                &dir.structure,
+            )),
+            None,
+        ),
         Ok(None) => (None, None),
         Err(e) => (None, Some(format!("plugins: {}", e))),
     }
@@ -744,18 +730,13 @@ pub fn extract_agents(
 ) -> (Option<ResourceSummary>, Option<String>) {
     let dir_result = match harness.agents(&Scope::Global) {
         Ok(Some(dir)) => {
-            let subdir = dir
-                .path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("agents");
-            let summary = extract_resource_summary(profile_path, subdir, &dir.structure);
+            let summary = extract_resource_summary(profile_path, "agents", &dir.structure);
             if !summary.items.is_empty() {
                 (Some(summary), None)
             } else {
                 let md_summary = extract_resource_summary(
                     profile_path,
-                    subdir,
+                    "agents",
                     &DirectoryStructure::Flat {
                         file_pattern: "*.md".to_string(),
                     },
