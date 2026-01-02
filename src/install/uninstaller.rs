@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use harness_locate::{Harness, HarnessKind, Scope};
 
+use super::manifest::{manifest_path, InstallManifest};
 use super::types::{
     ComponentType, InstallTarget, UninstallFailure, UninstallReport, UninstallSuccess,
 };
@@ -80,6 +81,12 @@ fn uninstall_component_from_dir(
     }
 
     fs::remove_dir_all(&component_dir).map_err(UninstallError::RemoveDir)?;
+
+    let manifest_file = manifest_path(&profile_dir);
+    if let Ok(mut manifest) = InstallManifest::load(&manifest_file) {
+        manifest.remove_component(component_type, component_name);
+        let _ = manifest.save(&manifest_file);
+    }
 
     let harness_path = remove_from_harness_if_active(target, component_name, component_type)?;
 

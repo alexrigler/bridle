@@ -7,9 +7,10 @@ use thiserror::Error;
 
 use harness_locate::{Harness, HarnessKind, Scope};
 
+use super::manifest::{manifest_path, InstallManifest, ManifestEntry};
 use super::types::{
-    AgentInfo, CommandInfo, InstallFailure, InstallOptions, InstallReport, InstallSkip,
-    InstallSuccess, InstallTarget, SkillInfo, SkipReason,
+    AgentInfo, CommandInfo, ComponentType, InstallFailure, InstallOptions, InstallReport,
+    InstallSkip, InstallSuccess, InstallTarget, SkillInfo, SkipReason, SourceInfo,
 };
 use crate::config::BridleConfig;
 use crate::harness::HarnessConfig;
@@ -74,6 +75,16 @@ fn install_skill_to_dir(
     options: &InstallOptions,
     profiles_dir: &std::path::Path,
 ) -> InstallResult {
+    install_skill_to_dir_with_source(skill, target, options, profiles_dir, None)
+}
+
+fn install_skill_to_dir_with_source(
+    skill: &SkillInfo,
+    target: &InstallTarget,
+    options: &InstallOptions,
+    profiles_dir: &std::path::Path,
+    source: Option<&SourceInfo>,
+) -> InstallResult {
     validate_component_name(&skill.name)?;
 
     let profile_dir = profiles_dir
@@ -100,6 +111,10 @@ fn install_skill_to_dir(
 
     fs::create_dir_all(&skill_dir).map_err(InstallError::CreateDir)?;
     fs::write(&skill_path, &skill.content).map_err(InstallError::WriteFile)?;
+
+    if let Some(source_info) = source {
+        update_manifest(&profile_dir, ComponentType::Skill, &skill.name, source_info);
+    }
 
     let harness_path = write_to_harness_if_active(target, skill)?;
 
@@ -151,6 +166,25 @@ fn write_to_harness_if_active(
     Ok(Some(harness_skill_path))
 }
 
+fn update_manifest(
+    profile_dir: &std::path::Path,
+    component_type: ComponentType,
+    name: &str,
+    source: &SourceInfo,
+) {
+    let manifest_file = manifest_path(profile_dir);
+    let mut manifest = InstallManifest::load(&manifest_file).unwrap_or_default();
+
+    manifest.add_entry(ManifestEntry {
+        component_type,
+        name: name.to_string(),
+        source: source.clone(),
+        installed_at: chrono::Utc::now().to_rfc3339(),
+    });
+
+    let _ = manifest.save(&manifest_file);
+}
+
 pub enum InstallOutcome {
     Installed(InstallSuccess),
     Skipped(InstallSkip),
@@ -162,6 +196,15 @@ pub fn install_agent(
     agent: &AgentInfo,
     target: &InstallTarget,
     options: &InstallOptions,
+) -> InstallResult {
+    install_agent_with_source(agent, target, options, None)
+}
+
+fn install_agent_with_source(
+    agent: &AgentInfo,
+    target: &InstallTarget,
+    options: &InstallOptions,
+    source: Option<&SourceInfo>,
 ) -> InstallResult {
     let profiles_dir = BridleConfig::profiles_dir().map_err(|_| InstallError::ProfileNotFound {
         harness: target.harness.clone(),
@@ -195,6 +238,10 @@ pub fn install_agent(
     fs::create_dir_all(&agent_dir).map_err(InstallError::CreateDir)?;
     fs::write(&agent_path, &agent.content).map_err(InstallError::WriteFile)?;
 
+    if let Some(source_info) = source {
+        update_manifest(&profile_dir, ComponentType::Agent, &agent.name, source_info);
+    }
+
     Ok(InstallOutcome::Installed(InstallSuccess {
         skill: agent.name.clone(),
         target: target.clone(),
@@ -207,6 +254,15 @@ pub fn install_command(
     command: &CommandInfo,
     target: &InstallTarget,
     options: &InstallOptions,
+) -> InstallResult {
+    install_command_with_source(command, target, options, None)
+}
+
+fn install_command_with_source(
+    command: &CommandInfo,
+    target: &InstallTarget,
+    options: &InstallOptions,
+    source: Option<&SourceInfo>,
 ) -> InstallResult {
     let profiles_dir = BridleConfig::profiles_dir().map_err(|_| InstallError::ProfileNotFound {
         harness: target.harness.clone(),
@@ -239,6 +295,15 @@ pub fn install_command(
 
     fs::create_dir_all(&command_dir).map_err(InstallError::CreateDir)?;
     fs::write(&command_path, &command.content).map_err(InstallError::WriteFile)?;
+
+    if let Some(source_info) = source {
+        update_manifest(
+            &profile_dir,
+            ComponentType::Command,
+            &command.name,
+            source_info,
+        );
+    }
 
     Ok(InstallOutcome::Installed(InstallSuccess {
         skill: command.name.clone(),

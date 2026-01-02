@@ -78,7 +78,7 @@ pub struct DiscoveryResult {
 }
 
 /// Metadata about the source repository
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct SourceInfo {
     pub owner: String,
     pub repo: String,
@@ -126,7 +126,8 @@ pub struct InstallFailure {
 }
 
 /// Component type for uninstall operations
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ComponentType {
     Skill,
     Agent,
