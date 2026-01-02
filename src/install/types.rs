@@ -19,6 +19,16 @@ pub struct SkillInfo {
     pub content: String,
 }
 
+/// Information about a discovered MCP server
+#[derive(Debug, Clone)]
+pub struct McpInfo {
+    pub name: String,
+    pub description: Option<String>,
+    pub command: String,
+    pub args: Vec<String>,
+    pub env: std::collections::HashMap<String, String>,
+}
+
 /// Target harness + profile for installation
 #[derive(Debug, Clone, Serialize)]
 pub struct InstallTarget {
@@ -39,6 +49,8 @@ pub struct InstallOptions {
 pub struct DiscoveryResult {
     /// Discovered skills
     pub skills: Vec<SkillInfo>,
+    /// Discovered MCP servers
+    pub mcp_servers: Vec<McpInfo>,
     /// Source repository metadata
     pub source: SourceInfo,
 }

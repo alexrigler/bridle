@@ -5,7 +5,7 @@
 use skills_locate::{extract_file, fetch_bytes, list_files, parse_skill_descriptor, GitHubRef};
 use thiserror::Error;
 
-use super::types::{DiscoveryResult, SkillInfo, SourceInfo};
+use super::types::{DiscoveryResult, McpInfo, SkillInfo, SourceInfo};
 
 #[derive(Debug, Error)]
 pub enum DiscoveryError {
@@ -54,11 +54,97 @@ pub fn discover_skills(url: &str) -> Result<DiscoveryResult, DiscoveryError> {
         });
     }
 
-    if skills.is_empty() {
+    let mcp_paths = list_files(&zip_bytes, ".mcp.json").map_err(DiscoveryError::FetchError)?;
+
+    let mut mcp_servers = Vec::new();
+    for path in mcp_paths {
+        let content = match extract_file(&zip_bytes, &path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        mcp_servers.extend(parse_mcp_json(&content));
+    }
+
+    if skills.is_empty() && mcp_servers.is_empty() {
         return Err(DiscoveryError::NoSkillsFound);
     }
 
-    Ok(DiscoveryResult { skills, source })
+    Ok(DiscoveryResult {
+        skills,
+        mcp_servers,
+        source,
+    })
+}
+
+fn parse_mcp_json(content: &str) -> Vec<McpInfo> {
+    use serde::Deserialize;
+    use std::collections::HashMap;
+
+    #[derive(Deserialize)]
+    struct McpServerEntry {
+        #[serde(default)]
+        command: Option<String>,
+        #[serde(default)]
+        args: Vec<String>,
+        #[serde(default)]
+        env: HashMap<String, String>,
+        #[serde(rename = "type")]
+        server_type: Option<String>,
+        url: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum McpFormat {
+        Wrapper {
+            #[serde(rename = "mcpServers")]
+            mcp_servers: HashMap<String, McpServerEntry>,
+        },
+        Single {
+            name: Option<String>,
+            description: Option<String>,
+            command: String,
+            #[serde(default)]
+            args: Vec<String>,
+            #[serde(default)]
+            env: HashMap<String, String>,
+        },
+    }
+
+    let parsed: McpFormat = match serde_json::from_str(content) {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+
+    match parsed {
+        McpFormat::Wrapper { mcp_servers } => mcp_servers
+            .into_iter()
+            .filter_map(|(name, entry)| {
+                let command = entry.command.or(entry.url)?;
+                Some(McpInfo {
+                    name,
+                    description: None,
+                    command,
+                    args: entry.args,
+                    env: entry.env,
+                })
+            })
+            .collect(),
+        McpFormat::Single {
+            name,
+            description,
+            command,
+            args,
+            env,
+        } => vec![McpInfo {
+            name: name.unwrap_or_else(|| "unknown".to_string()),
+            description,
+            command,
+            args,
+            env,
+        }],
+    }
 }
 
 fn normalize_archive_path(archive_path: &str, github_ref: &GitHubRef) -> String {
@@ -104,6 +190,36 @@ mod tests {
             normalize_archive_path(path, &github_ref),
             "other/skills/SKILL.md"
         );
+    }
+
+    #[test]
+    fn parse_mcp_wrapper_format() {
+        let content = r#"{
+            "mcpServers": {
+                "filesystem": {"command": "npx", "args": ["-y", "@anthropic/mcp-filesystem"]},
+                "web": {"type": "sse", "url": "https://example.com/mcp"}
+            }
+        }"#;
+        let servers = super::parse_mcp_json(content);
+        assert_eq!(servers.len(), 2);
+        assert!(servers.iter().any(|s| s.name == "filesystem"));
+        assert!(servers.iter().any(|s| s.name == "web"));
+    }
+
+    #[test]
+    fn parse_mcp_single_format() {
+        let content = r#"{"name": "test", "command": "node", "args": ["server.js"]}"#;
+        let servers = super::parse_mcp_json(content);
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].name, "test");
+        assert_eq!(servers[0].command, "node");
+    }
+
+    #[test]
+    fn parse_mcp_malformed_returns_empty() {
+        let content = "not valid json";
+        let servers = super::parse_mcp_json(content);
+        assert!(servers.is_empty());
     }
 
     #[test]
