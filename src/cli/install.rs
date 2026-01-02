@@ -6,6 +6,8 @@ use color_eyre::eyre::{Result, eyre};
 use dialoguer_multiselect::GroupMultiSelect;
 use dialoguer_multiselect::theme::ColorfulTheme;
 
+use harness_locate::{Harness, HarnessKind, Scope};
+
 use crate::config::{BridleConfig, ProfileManager};
 use crate::harness::HarnessConfig;
 use crate::install::discovery::{DiscoveryError, discover_skills};
@@ -13,6 +15,30 @@ use crate::install::installer::{install_agent, install_command, install_skills};
 use crate::install::{
     AgentInfo, CommandInfo, DiscoveryResult, InstallOptions, InstallTarget, McpInfo, SkillInfo,
 };
+
+fn harness_supports_agents(harness_id: &str) -> bool {
+    parse_harness_kind(harness_id)
+        .and_then(|kind| Harness::locate(kind).ok())
+        .and_then(|h| h.agents(&Scope::Global).ok().flatten())
+        .is_some()
+}
+
+fn harness_supports_commands(harness_id: &str) -> bool {
+    parse_harness_kind(harness_id)
+        .and_then(|kind| Harness::locate(kind).ok())
+        .and_then(|h| h.commands(&Scope::Global).ok().flatten())
+        .is_some()
+}
+
+fn parse_harness_kind(id: &str) -> Option<HarnessKind> {
+    match id {
+        "claude-code" | "claude" | "cc" => Some(HarnessKind::ClaudeCode),
+        "opencode" | "oc" => Some(HarnessKind::OpenCode),
+        "goose" => Some(HarnessKind::Goose),
+        "amp-code" | "amp" | "ampcode" => Some(HarnessKind::AmpCode),
+        _ => None,
+    }
+}
 
 /// Selected components from the discovery result
 struct SelectedComponents {
@@ -113,31 +139,47 @@ pub fn run(source: &str, force: bool) -> Result<()> {
         }
 
         // Install agents
-        for agent in &selected.agents {
-            match install_agent(agent, target, &options) {
-                Ok(crate::install::installer::InstallOutcome::Installed(success)) => {
-                    eprintln!("  + Installed agent: {}", success.skill);
-                }
-                Ok(crate::install::installer::InstallOutcome::Skipped(skip)) => {
-                    eprintln!("  = Skipped agent: {} (already exists)", skip.skill);
-                }
-                Err(e) => {
-                    eprintln!("  ! Error installing agent {}: {}", agent.name, e);
+        if !selected.agents.is_empty() && !harness_supports_agents(&target.harness) {
+            eprintln!(
+                "  ~ Skipping {} agent(s) - not supported by {}",
+                selected.agents.len(),
+                target.harness
+            );
+        } else {
+            for agent in &selected.agents {
+                match install_agent(agent, target, &options) {
+                    Ok(crate::install::installer::InstallOutcome::Installed(success)) => {
+                        eprintln!("  + Installed agent: {}", success.skill);
+                    }
+                    Ok(crate::install::installer::InstallOutcome::Skipped(skip)) => {
+                        eprintln!("  = Skipped agent: {} (already exists)", skip.skill);
+                    }
+                    Err(e) => {
+                        eprintln!("  ! Error installing agent {}: {}", agent.name, e);
+                    }
                 }
             }
         }
 
         // Install commands
-        for cmd in &selected.commands {
-            match install_command(cmd, target, &options) {
-                Ok(crate::install::installer::InstallOutcome::Installed(success)) => {
-                    eprintln!("  + Installed command: {}", success.skill);
-                }
-                Ok(crate::install::installer::InstallOutcome::Skipped(skip)) => {
-                    eprintln!("  = Skipped command: {} (already exists)", skip.skill);
-                }
-                Err(e) => {
-                    eprintln!("  ! Error installing command {}: {}", cmd.name, e);
+        if !selected.commands.is_empty() && !harness_supports_commands(&target.harness) {
+            eprintln!(
+                "  ~ Skipping {} command(s) - not supported by {}",
+                selected.commands.len(),
+                target.harness
+            );
+        } else {
+            for cmd in &selected.commands {
+                match install_command(cmd, target, &options) {
+                    Ok(crate::install::installer::InstallOutcome::Installed(success)) => {
+                        eprintln!("  + Installed command: {}", success.skill);
+                    }
+                    Ok(crate::install::installer::InstallOutcome::Skipped(skip)) => {
+                        eprintln!("  = Skipped command: {} (already exists)", skip.skill);
+                    }
+                    Err(e) => {
+                        eprintln!("  ! Error installing command {}: {}", cmd.name, e);
+                    }
                 }
             }
         }

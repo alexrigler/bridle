@@ -192,18 +192,11 @@ fn write_agent_to_harness_if_active(
     let harness =
         Harness::locate(kind).map_err(|_| InstallError::HarnessNotFound(target.harness.clone()))?;
 
-    let agents_dir = harness
-        .agents(&Scope::Global)
-        .ok()
-        .flatten()
-        .map(|r| r.path)
-        .unwrap_or_else(|| {
-            harness
-                .config_dir()
-                .map(|d| d.join(CANONICAL_AGENTS_DIR))
-                .unwrap_or_default()
-        });
-    let harness_agent_path = agents_dir.join(format!("{}.md", &agent.name));
+    // Check if harness supports agents - skip harness write if not
+    let Some(agents_resource) = harness.agents(&Scope::Global).ok().flatten() else {
+        return Ok(None);
+    };
+    let harness_agent_path = agents_resource.path.join(format!("{}.md", &agent.name));
 
     if let Some(parent) = harness_agent_path.parent() {
         fs::create_dir_all(parent).map_err(InstallError::CreateDir)?;
@@ -233,18 +226,10 @@ fn write_command_to_harness_if_active(
     let harness =
         Harness::locate(kind).map_err(|_| InstallError::HarnessNotFound(target.harness.clone()))?;
 
-    let commands_dir = harness
-        .commands(&Scope::Global)
-        .ok()
-        .flatten()
-        .map(|r| r.path)
-        .unwrap_or_else(|| {
-            harness
-                .config_dir()
-                .map(|d| d.join(CANONICAL_COMMANDS_DIR))
-                .unwrap_or_default()
-        });
-    let harness_command_path = commands_dir.join(format!("{}.md", &command.name));
+    let Some(commands_resource) = harness.commands(&Scope::Global).ok().flatten() else {
+        return Ok(None);
+    };
+    let harness_command_path = commands_resource.path.join(format!("{}.md", &command.name));
 
     if let Some(parent) = harness_command_path.parent() {
         fs::create_dir_all(parent).map_err(InstallError::CreateDir)?;
