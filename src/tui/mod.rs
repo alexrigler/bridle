@@ -668,7 +668,11 @@ impl App {
             }
         };
 
-        match self.manager.create_from_current(&harness, &profile_name) {
+        match self.manager.create_from_current_with_resources(
+            &harness,
+            Some(&harness),
+            &profile_name,
+        ) {
             Ok(_) => {
                 self.status_message = Some(format!("Created profile '{}'", name));
                 self.refresh_profiles();
