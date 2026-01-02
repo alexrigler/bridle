@@ -29,14 +29,15 @@ pub fn run(source: &str, force: bool) -> Result<()> {
         DiscoveryError::NoSkillsFound => eyre!("No skills found in repository"),
     })?;
 
-    if discovery.skills.is_empty() {
-        eprintln!("No skills found in {}", url);
+    if discovery.skills.is_empty() && discovery.mcp_servers.is_empty() {
+        eprintln!("No skills or MCP servers found in {}", url);
         return Ok(());
     }
 
     eprintln!(
-        "Found {} skill(s) from {}/{}",
+        "Found {} skill(s) and {} MCP server(s) from {}/{}",
         discovery.skills.len(),
+        discovery.mcp_servers.len(),
         discovery.source.owner,
         discovery.source.repo
     );
