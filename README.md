@@ -141,7 +141,8 @@ view = "Dashboard"      # Will add more later :P
 | Amp         | `~/.amp/`               | Experimental (ish) |
 
 ## Honorable Mentions
-- Thank you Melvyn for [pointing out my stupidity](https://x.com/melvynxdev/status/2007312037920289275?s=20)
+- Thank you Melvyn for [pointing out my stupidity](https://x.com/melvynxdev/status/2007312037920289275)
+- Thank you Theo for [giving me a chance to show my work](https://x.com/theo/status/2007255666256425431)
 
 ## License
 
