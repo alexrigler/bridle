@@ -153,3 +153,65 @@ fn unknown_harness_fails() {
         .assert()
         .failure();
 }
+
+#[test]
+fn profile_switch_preserves_unknown_files() {
+    use std::fs;
+
+    let temp = TempDir::new().unwrap();
+    let bridle_config = temp.path().join("bridle");
+    let xdg_config = temp.path().join("xdg");
+    let opencode_config = xdg_config.join("opencode");
+
+    fs::create_dir_all(&opencode_config).unwrap();
+    fs::write(opencode_config.join("opencode.jsonc"), "{}").unwrap();
+
+    let mut cmd = bridle();
+    cmd.env("BRIDLE_CONFIG_DIR", &bridle_config);
+    cmd.env("XDG_CONFIG_HOME", &xdg_config);
+    cmd.args([
+        "profile",
+        "create",
+        "opencode",
+        "test-switch",
+        "--from-current",
+    ])
+    .assert()
+    .success();
+
+    fs::write(opencode_config.join("unknown.txt"), "precious data").unwrap();
+    fs::create_dir_all(opencode_config.join("unknown-dir")).unwrap();
+    fs::write(
+        opencode_config.join("unknown-dir/nested.txt"),
+        "nested precious",
+    )
+    .unwrap();
+
+    let mut cmd2 = bridle();
+    cmd2.env("BRIDLE_CONFIG_DIR", &bridle_config);
+    cmd2.env("XDG_CONFIG_HOME", &xdg_config);
+    cmd2.args(["profile", "switch", "opencode", "test-switch"])
+        .assert()
+        .success();
+
+    assert!(
+        opencode_config.join("unknown.txt").exists(),
+        "Unknown file should be preserved after switch"
+    );
+    assert_eq!(
+        fs::read_to_string(opencode_config.join("unknown.txt")).unwrap(),
+        "precious data"
+    );
+    assert!(
+        opencode_config.join("unknown-dir/nested.txt").exists(),
+        "Unknown nested file should be preserved after switch"
+    );
+    assert_eq!(
+        fs::read_to_string(opencode_config.join("unknown-dir/nested.txt")).unwrap(),
+        "nested precious"
+    );
+    assert!(
+        opencode_config.join("opencode.jsonc").exists(),
+        "Profile content should still be applied"
+    );
+}
