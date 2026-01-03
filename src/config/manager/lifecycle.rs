@@ -123,39 +123,36 @@ impl ProfileManager {
 
         let target_dir = harness.config_dir()?;
 
-        let temp_dir = target_dir.with_extension("bridle_tmp");
-        if temp_dir.exists() {
-            std::fs::remove_dir_all(&temp_dir)?;
+        if !target_dir.exists() {
+            std::fs::create_dir_all(&target_dir)?;
         }
-        std::fs::create_dir_all(&temp_dir)?;
 
         let mcp_path = harness.mcp_config_path();
         let mcp_filename = mcp_path
             .as_ref()
             .and_then(|p| p.file_name().map(|n| n.to_os_string()));
 
+        // SAFETY: Only sync items IN profile to target - preserves unmanaged files
         for entry in std::fs::read_dir(&profile_path)? {
             let entry = entry?;
+            let file_name = entry.file_name();
             let file_type = entry.file_type()?;
 
+            if let Some(ref mcp_name) = mcp_filename
+                && file_name == *mcp_name
+            {
+                continue;
+            }
+
+            let source = entry.path();
+            let dest = target_dir.join(&file_name);
+
             if file_type.is_file() {
-                if let Some(ref mcp_name) = mcp_filename
-                    && entry.file_name() == *mcp_name
-                {
-                    continue;
-                }
-                let dest = temp_dir.join(entry.file_name());
-                std::fs::copy(entry.path(), dest)?;
+                std::fs::copy(&source, &dest)?;
             } else if file_type.is_dir() {
-                let dest = temp_dir.join(entry.file_name());
-                files::copy_dir_filtered(&entry.path(), &dest)?;
+                files::copy_dir_filtered(&source, &dest)?;
             }
         }
-
-        if target_dir.exists() {
-            std::fs::remove_dir_all(&target_dir)?;
-        }
-        std::fs::rename(&temp_dir, &target_dir)?;
 
         if let Some(h) = harness_for_resources {
             files::copy_resource_directories(h, false, &profile_path)?;

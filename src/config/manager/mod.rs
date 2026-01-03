@@ -441,6 +441,244 @@ mod tests {
     }
 
     #[test]
+    fn switch_preserves_unknown_files() {
+        let temp = TempDir::new().unwrap();
+        let profiles_dir = temp.path().join("profiles");
+        let live_config = temp.path().join("live_config");
+        fs::create_dir_all(&live_config).unwrap();
+
+        let harness = MockHarness::new("test-preserves-unknown", live_config.clone());
+        let manager = ProfileManager::new(profiles_dir);
+
+        fs::write(live_config.join("known.txt"), "profile content").unwrap();
+        let profile_a = ProfileName::new("profile-a").unwrap();
+        manager.create_from_current(&harness, &profile_a).unwrap();
+
+        fs::write(live_config.join("unknown.txt"), "precious data").unwrap();
+        fs::create_dir_all(live_config.join("unknown-dir")).unwrap();
+        fs::write(live_config.join("unknown-dir/nested.txt"), "nested precious").unwrap();
+
+        manager.switch_profile(&harness, &profile_a).unwrap();
+
+        assert!(
+            live_config.join("unknown.txt").exists(),
+            "Top-level unknown file should be preserved"
+        );
+        assert_eq!(
+            fs::read_to_string(live_config.join("unknown.txt")).unwrap(),
+            "precious data"
+        );
+        assert!(
+            live_config.join("unknown-dir/nested.txt").exists(),
+            "Unknown directory with nested files should be preserved"
+        );
+        assert_eq!(
+            fs::read_to_string(live_config.join("unknown-dir/nested.txt")).unwrap(),
+            "nested precious"
+        );
+        assert!(
+            live_config.join("known.txt").exists(),
+            "Profile content should still be applied"
+        );
+    }
+
+    #[test]
+    fn switch_preserves_files_inside_managed_dirs() {
+        let temp = TempDir::new().unwrap();
+        let profiles_dir = temp.path().join("profiles");
+        let live_config = temp.path().join("live_config");
+        fs::create_dir_all(&live_config).unwrap();
+
+        let harness = MockHarness::new("test-preserves-nested", live_config.clone());
+        let manager = ProfileManager::new(profiles_dir);
+
+        fs::create_dir_all(live_config.join("plugins")).unwrap();
+        fs::write(live_config.join("plugins/managed.txt"), "from profile").unwrap();
+        let profile_a = ProfileName::new("profile-a").unwrap();
+        manager.create_from_current(&harness, &profile_a).unwrap();
+
+        fs::write(live_config.join("plugins/runtime-cache.db"), "runtime data").unwrap();
+
+        manager.switch_profile(&harness, &profile_a).unwrap();
+
+        assert!(
+            live_config.join("plugins/runtime-cache.db").exists(),
+            "Files inside managed dirs not in profile should be preserved"
+        );
+        assert_eq!(
+            fs::read_to_string(live_config.join("plugins/runtime-cache.db")).unwrap(),
+            "runtime data"
+        );
+        assert!(
+            live_config.join("plugins/managed.txt").exists(),
+            "Profile content should still be applied"
+        );
+    }
+
+    #[test]
+    fn create_from_current_captures_arbitrary_directories() {
+        let temp = TempDir::new().unwrap();
+        let profiles_dir = temp.path().join("profiles");
+        let live_config = temp.path().join("live_config");
+        fs::create_dir_all(&live_config).unwrap();
+
+        fs::write(live_config.join("config.json"), "{}").unwrap();
+        fs::create_dir_all(live_config.join("custom-dir/level2/level3")).unwrap();
+        fs::write(live_config.join("custom-dir/data.txt"), "custom data").unwrap();
+        fs::write(live_config.join("custom-dir/level2/nested.txt"), "nested").unwrap();
+        fs::write(live_config.join("custom-dir/level2/level3/deep.txt"), "deep").unwrap();
+
+        let harness = MockHarness::new("test-captures-dirs", live_config.clone());
+        let manager = ProfileManager::new(profiles_dir);
+
+        let profile = ProfileName::new("test-profile").unwrap();
+        let profile_path = manager.create_from_current(&harness, &profile).unwrap();
+
+        assert!(
+            profile_path.join("custom-dir").exists(),
+            "Arbitrary directory should be captured in profile"
+        );
+        assert!(
+            profile_path.join("custom-dir/data.txt").exists(),
+            "Files inside arbitrary directory should be captured"
+        );
+        assert!(
+            profile_path.join("custom-dir/level2/level3/deep.txt").exists(),
+            "Deep nested files should be captured"
+        );
+        assert_eq!(
+            fs::read_to_string(profile_path.join("custom-dir/level2/level3/deep.txt")).unwrap(),
+            "deep"
+        );
+    }
+
+    #[test]
+    fn switch_saves_new_directories_to_old_profile() {
+        let temp = TempDir::new().unwrap();
+        let profiles_dir = temp.path().join("profiles");
+        let live_config = temp.path().join("live_config");
+        fs::create_dir_all(&live_config).unwrap();
+
+        let harness = MockHarness::new("test-saves-new-dirs", live_config.clone());
+        let manager = ProfileManager::new(profiles_dir.clone());
+
+        fs::write(live_config.join("config.json"), "A").unwrap();
+        let profile_a = ProfileName::new("profile-a").unwrap();
+        manager.create_from_current(&harness, &profile_a).unwrap();
+
+        fs::write(live_config.join("config.json"), "B").unwrap();
+        let profile_b = ProfileName::new("profile-b").unwrap();
+        manager.create_from_current(&harness, &profile_b).unwrap();
+
+        manager.switch_profile(&harness, &profile_a).unwrap();
+
+        fs::create_dir_all(live_config.join("new-dir/nested")).unwrap();
+        fs::write(live_config.join("new-dir/nested/data.txt"), "new data").unwrap();
+
+        manager.switch_profile(&harness, &profile_b).unwrap();
+
+        let profile_a_path = profiles_dir
+            .join("test-saves-new-dirs")
+            .join("profile-a");
+        assert!(
+            profile_a_path.join("new-dir/nested/data.txt").exists(),
+            "New directories added while on profile-a should be saved when switching away"
+        );
+        assert_eq!(
+            fs::read_to_string(profile_a_path.join("new-dir/nested/data.txt")).unwrap(),
+            "new data"
+        );
+    }
+
+    #[test]
+    fn deep_nesting_survives_multiple_round_trips() {
+        let temp = TempDir::new().unwrap();
+        let profiles_dir = temp.path().join("profiles");
+        let live_config = temp.path().join("live_config");
+        fs::create_dir_all(&live_config).unwrap();
+
+        let harness = MockHarness::new("test-deep-nesting", live_config.clone());
+        let manager = ProfileManager::new(profiles_dir);
+
+        fs::create_dir_all(live_config.join("a/b/c/d/e/f")).unwrap();
+        fs::write(live_config.join("a/b/c/d/e/f/deep.txt"), "level 6").unwrap();
+        fs::write(live_config.join("a/b/c/mid.txt"), "level 3").unwrap();
+        fs::write(live_config.join("a/shallow.txt"), "level 1").unwrap();
+
+        let profile_a = ProfileName::new("profile-a").unwrap();
+        manager.create_from_current(&harness, &profile_a).unwrap();
+
+        fs::write(live_config.join("config.txt"), "B").unwrap();
+        let profile_b = ProfileName::new("profile-b").unwrap();
+        manager.create_from_current(&harness, &profile_b).unwrap();
+
+        for _ in 0..3 {
+            manager.switch_profile(&harness, &profile_a).unwrap();
+            manager.switch_profile(&harness, &profile_b).unwrap();
+        }
+        manager.switch_profile(&harness, &profile_a).unwrap();
+
+        assert!(
+            live_config.join("a/b/c/d/e/f/deep.txt").exists(),
+            "Deep nested file should survive multiple round trips"
+        );
+        assert_eq!(
+            fs::read_to_string(live_config.join("a/b/c/d/e/f/deep.txt")).unwrap(),
+            "level 6"
+        );
+        assert_eq!(
+            fs::read_to_string(live_config.join("a/b/c/mid.txt")).unwrap(),
+            "level 3"
+        );
+        assert_eq!(
+            fs::read_to_string(live_config.join("a/shallow.txt")).unwrap(),
+            "level 1"
+        );
+    }
+
+    #[test]
+    fn wide_directory_structure_preserved() {
+        let temp = TempDir::new().unwrap();
+        let profiles_dir = temp.path().join("profiles");
+        let live_config = temp.path().join("live_config");
+        fs::create_dir_all(&live_config).unwrap();
+
+        let harness = MockHarness::new("test-wide-dirs", live_config.clone());
+        let manager = ProfileManager::new(profiles_dir);
+
+        for i in 0..10 {
+            fs::create_dir_all(live_config.join(format!("dir-{}/sub", i))).unwrap();
+            fs::write(live_config.join(format!("dir-{}/file.txt", i)), format!("data-{}", i)).unwrap();
+            fs::write(live_config.join(format!("dir-{}/sub/nested.txt", i)), format!("nested-{}", i)).unwrap();
+        }
+
+        let profile_a = ProfileName::new("profile-a").unwrap();
+        manager.create_from_current(&harness, &profile_a).unwrap();
+
+        fs::write(live_config.join("other.txt"), "other").unwrap();
+        let profile_b = ProfileName::new("profile-b").unwrap();
+        manager.create_from_current(&harness, &profile_b).unwrap();
+
+        manager.switch_profile(&harness, &profile_b).unwrap();
+        manager.switch_profile(&harness, &profile_a).unwrap();
+
+        for i in 0..10 {
+            assert!(
+                live_config.join(format!("dir-{}/file.txt", i)).exists(),
+                "dir-{}/file.txt should exist after round trip", i
+            );
+            assert_eq!(
+                fs::read_to_string(live_config.join(format!("dir-{}/file.txt", i))).unwrap(),
+                format!("data-{}", i)
+            );
+            assert!(
+                live_config.join(format!("dir-{}/sub/nested.txt", i)).exists(),
+                "dir-{}/sub/nested.txt should exist after round trip", i
+            );
+        }
+    }
+
+    #[test]
     fn list_files_matching_finds_files_with_extension() {
         let temp = TempDir::new().unwrap();
         let dir = temp.path();
