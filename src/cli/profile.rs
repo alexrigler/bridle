@@ -223,5 +223,6 @@ pub fn switch_profile(harness_name: &str, profile_name: &str) -> Result<()> {
     manager.switch_profile_with_resources(&harness, Some(&harness), &name)?;
     println!("Switched to profile: {}", name.as_str());
     println!("Harness: {harness_id}");
+    println!("Note: Unmanaged files in config directory were preserved.");
     Ok(())
 }
