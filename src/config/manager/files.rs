@@ -29,12 +29,16 @@ pub fn copy_config_files(
         if config_dir.exists() {
             for entry in std::fs::read_dir(&config_dir)? {
                 let entry = entry?;
-                if entry.file_type()?.is_file() {
-                    let dest = profile_path.join(entry.file_name());
+                let file_type = entry.file_type()?;
+                let dest = profile_path.join(entry.file_name());
+
+                if file_type.is_file() {
                     std::fs::copy(entry.path(), &dest)?;
                     if let Ok(canonical) = entry.path().canonicalize() {
                         copied_files.insert(canonical);
                     }
+                } else if file_type.is_dir() {
+                    copy_dir_filtered(&entry.path(), &dest)?;
                 }
             }
         }
@@ -313,6 +317,49 @@ mod tests {
         assert!(dst.path().join("hooks/pre-commit/run.sh").exists());
         let content = fs::read_to_string(dst.path().join("hooks/pre-commit/run.sh")).unwrap();
         assert_eq!(content, "#!/bin/bash");
+    }
+
+    #[test]
+    fn copy_config_files_copies_directories_when_saving() {
+        use crate::harness::HarnessConfig;
+        use std::path::PathBuf;
+
+        struct TestHarness(PathBuf);
+        impl HarnessConfig for TestHarness {
+            fn id(&self) -> &str { "test" }
+            fn config_dir(&self) -> crate::error::Result<PathBuf> { Ok(self.0.clone()) }
+            fn installation_status(&self) -> crate::error::Result<harness_locate::InstallationStatus> {
+                Ok(harness_locate::InstallationStatus::NotInstalled)
+            }
+            fn mcp_filename(&self) -> Option<String> { None }
+            fn mcp_config_path(&self) -> Option<PathBuf> { None }
+            fn parse_mcp_servers(&self, _: &str, _: &str) -> crate::error::Result<Vec<(String, bool)>> {
+                Ok(vec![])
+            }
+        }
+
+        let temp = TempDir::new().unwrap();
+        let config_dir = temp.path().join("config");
+        let profile_dir = temp.path().join("profile");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::create_dir_all(&profile_dir).unwrap();
+
+        fs::write(config_dir.join("settings.json"), "{}").unwrap();
+        fs::create_dir_all(config_dir.join("custom-dir/nested")).unwrap();
+        fs::write(config_dir.join("custom-dir/data.txt"), "precious").unwrap();
+        fs::write(config_dir.join("custom-dir/nested/deep.txt"), "deep data").unwrap();
+
+        let harness = TestHarness(config_dir);
+        copy_config_files(&harness, true, &profile_dir).unwrap();
+
+        assert!(profile_dir.join("settings.json").exists());
+        assert!(profile_dir.join("custom-dir").exists());
+        assert!(profile_dir.join("custom-dir/data.txt").exists());
+        assert_eq!(
+            fs::read_to_string(profile_dir.join("custom-dir/data.txt")).unwrap(),
+            "precious"
+        );
+        assert!(profile_dir.join("custom-dir/nested/deep.txt").exists());
     }
 
     #[cfg(unix)]
