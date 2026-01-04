@@ -1,0 +1,47 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["type/feature", "status/triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please check [existing issues](https://github.com/neiii/bridle/issues?q=is%3Aissue+label%3Atype%2Ffeature) first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Use Case
+      description: What problem does this solve? What are you trying to do?
+      placeholder: "I often need to sync my profiles across machines, but currently..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How do you think this should work?
+      placeholder: "A `bridle sync` command that pushes/pulls profiles to a git repo..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any workarounds or alternative approaches you've tried?
+      placeholder: "I currently manually copy files, but it's error-prone..."
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Which area does this affect?
+      options:
+        - CLI commands
+        - TUI interface
+        - Installation / Discovery
+        - Harness support
+        - Configuration
+        - Other
+    validations:
+      required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Help
+    url: https://github.com/neiii/bridle/discussions/categories/q-a
+    about: Ask questions in Discussions instead of opening an issue
+  - name: Ideas & Brainstorming
+    url: https://github.com/neiii/bridle/discussions/categories/ideas
+    about: Discuss ideas before creating a formal feature request

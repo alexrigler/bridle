@@ -1,0 +1,80 @@
+name: Bug Report
+description: Something isn't working correctly
+labels: ["type/bug", "status/triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug!
+
+  - type: input
+    id: version
+    attributes:
+      label: Bridle Version
+      description: Run `bridle --version`
+      placeholder: "0.2.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: harness
+    attributes:
+      label: Which harness(es) are affected?
+      multiple: true
+      options:
+        - Claude Code
+        - OpenCode
+        - Goose
+        - AMP
+        - All / Not harness-specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug
+      placeholder: "When I run `bridle profile switch ...`, it..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: "I expected the profile to switch and preserve my custom files..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the issue
+      placeholder: |
+        1. Run `bridle profile create opencode test`
+        2. Add a custom file to the profile
+        3. Run `bridle profile switch opencode other`
+        4. Switch back - custom file is gone
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Paste any error messages (this will be formatted as code)
+      render: shell
