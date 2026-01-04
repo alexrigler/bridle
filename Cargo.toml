@@ -53,7 +53,4 @@ predicates = "3.1"
 inherits = "release"
 lto = "thin"
 
-# Local development overrides (ignored by cargo publish)
-[patch.crates-io]
-harness-locate = { path = "../harness-locate/crates/harness-locate" }
-skills-locate = { path = "../harness-locate/crates/skills-locate" }
+
