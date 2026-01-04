@@ -4,7 +4,7 @@
 #![allow(unused_imports)]
 
 mod bridle;
-mod jsonc;
+pub mod jsonc;
 mod manager;
 mod profile_name;
 mod types;

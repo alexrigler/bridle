@@ -6,6 +6,7 @@
 pub mod discovery;
 pub mod installer;
 pub mod manifest;
+pub mod mcp_config;
 pub mod types;
 pub mod uninstaller;
 
