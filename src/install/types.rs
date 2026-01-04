@@ -104,7 +104,7 @@ pub struct InstallSkip {
     pub reason: SkipReason,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub enum SkipReason {
     /// File already exists and --force not specified
     AlreadyExists,
