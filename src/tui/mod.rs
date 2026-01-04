@@ -14,7 +14,9 @@ use crossterm::{
         MouseEventKind,
     },
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{
+        ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    },
 };
 use harness_locate::{Harness, HarnessKind, InstallationStatus};
 
@@ -728,7 +730,12 @@ fn restore_terminal_for_editor() -> io::Result<()> {
 
 fn reinit_terminal_after_editor() -> io::Result<()> {
     enable_raw_mode()?;
-    execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(
+        io::stdout(),
+        EnterAlternateScreen,
+        crossterm::terminal::Clear(ClearType::All),
+        EnableMouseCapture
+    )?;
     Ok(())
 }
 
