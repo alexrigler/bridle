@@ -12,8 +12,8 @@ categories = ["command-line-utilities", "config", "development-tools"]
 authors = ["d0"]
 
 [dependencies]
-harness-locate = "0.3"
-skills-locate = "0.2"
+harness-locate = "0.3.1"
+skills-locate = "0.2.1"
 
 
 # CLI
