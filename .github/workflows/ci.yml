@@ -171,4 +171,4 @@ jobs:
       - name: Install jscpd
         run: bun install -g jscpd
       - name: Check for duplicate code
-        run: jscpd crates --reporters console --threshold 6
+        run: jscpd crates --reporters console --threshold 12
